@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Chat</title>
+<style>
+  :root {
+    --bg: #f7f5f0; --panel: #ffffff; --text: #1f1e1b; --muted: #77746c;
+    --line: #e4e0d6; --accent: #c96442; --accent-text: #fff;
+    --user-bg: #ece8de; --code-bg: #f1eee6; --danger: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1b19; --panel: #262522; --text: #ece9e1; --muted: #9b978d;
+      --line: #3a3833; --accent: #d97757; --user-bg: #33312c; --code-bg: #2f2d29;
+      --danger: #f2b8b5;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 12px 20px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 17px; font-weight: 600; margin: 0; }
+  header .actions { display: flex; gap: 8px; align-items: center; }
+  button, select {
+    font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); padding: 6px 12px; font-size: 14px;
+  }
+  button:hover, select:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  main { flex: 1; overflow-y: auto; }
+  #messages { max-width: 760px; margin: 0 auto; padding: 24px 20px 12px; }
+  .empty { text-align: center; color: var(--muted); margin-top: 18vh; }
+  .empty h2 { color: var(--text); font-weight: 500; font-size: 26px; margin: 0 0 6px; }
+
+  .msg { margin: 0 0 22px; }
+  .msg.user { display: flex; justify-content: flex-end; }
+  .msg.user .bubble {
+    background: var(--user-bg); padding: 10px 14px; border-radius: 16px;
+    max-width: 85%; white-space: pre-wrap; word-wrap: break-word;
+  }
+  .msg.assistant .bubble { word-wrap: break-word; }
+  .bubble p { margin: 0 0 12px; }
+  .bubble p:last-child { margin-bottom: 0; }
+  .bubble ul, .bubble ol { margin: 0 0 12px; padding-left: 24px; }
+  .bubble h3, .bubble h4 { margin: 16px 0 8px; }
+  .bubble a { color: var(--accent); }
+  .bubble code {
+    background: var(--code-bg); padding: 1px 5px; border-radius: 5px;
+    font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .bubble pre {
+    background: var(--code-bg); padding: 12px 14px; border-radius: 10px;
+    overflow-x: auto; position: relative; margin: 0 0 12px;
+  }
+  .bubble pre code { background: none; padding: 0; }
+  .copy-btn { position: absolute; top: 6px; right: 6px; font-size: 12px; padding: 2px 8px; }
+  .error { color: var(--danger); font-size: 14px; }
+  .cursor::after { content: "▍"; animation: blink 1s steps(1) infinite; color: var(--muted); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  footer { padding: 10px 20px 18px; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+  form#composer {
+    max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 8px 8px 8px 14px;
+  }
+  textarea {
+    flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: var(--text);
+    font: inherit; max-height: 200px; padding: 6px 0;
+  }
+  .hint { max-width: 760px; margin: 6px auto 0; font-size: 12px; color: var(--muted); text-align: center; }
+
+  #setup {
+    position: fixed; inset: 0; background: var(--bg); display: flex;
+    align-items: center; justify-content: center; padding: 20px; z-index: 10;
+  }
+  #setup form {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 28px; width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 12px;
+  }
+  #setup h2 { margin: 0; font-size: 20px; font-weight: 600; }
+  #setup p { margin: 0; font-size: 14px; color: var(--muted); }
+  #setup input {
+    font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text);
+  }
+  [hidden] { display: none !important; }
+  @media (max-width: 520px) {
+    header { padding: 10px 12px; }
+    header h1 { display: none; }
+    button, select { padding: 6px 9px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="setup" hidden>
+  <form id="setupForm">
+    <h2>Connect your Claude API key</h2>
+    <p>Paste your Anthropic API key (starts with <code>sk-ant-</code>). It is saved only in this browser and never uploaded anywhere except Anthropic.</p>
+    <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-..." required>
+    <div id="setupError" class="error"></div>
+    <button class="primary" id="setupBtn" type="submit">Continue</button>
+  </form>
+</div>
+
+<header>
+  <h1>Chat</h1>
+  <div class="actions">
+    <select id="model" title="Model">
+      <option value="claude-sonnet-5-5">Sonnet 5.5</option>
+      <option value="claude-opus-5-5">Opus 5.5</option>
+      <option value="claude-haiku-5-5">Haiku 5.5</option>
+    </select>
+    <button id="newChat" type="button">New chat</button>
+    <button id="forgetKey" type="button" title="Remove the saved API key from this browser">Lock</button>
+  </div>
+</header>
+
+<main id="scroller">
+  <div id="messages"></div>
+</main>
+
+<footer>
+  <form id="composer">
+    <textarea id="input" rows="1" placeholder="Message Claude…" autofocus></textarea>
+    <button id="send" class="primary" type="submit">Send</button>
+  </form>
+  <div class="hint">Enter to send · Shift+Enter for a new line</div>
+</footer>
+
+<script>
+/* ---------- Settings ---------- */
+const API_URL = "https://api.anthropic.com/v1/messages";
+const SYSTEM_PROMPT = "You are Claude, a helpful AI assistant.";
+const MAX_TOKENS = 8192;
+
+/* ---------- Storage (safe wrappers) ---------- */
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+let apiKey = store.get("anthropic_key") || "";
+let history = [];
+try { history = JSON.parse(store.get("chat_history") || "[]"); } catch { history = []; }
+let busy = false;
+
+const $ = (id) => document.getElementById(id);
+const messagesEl = $("messages"), inputEl = $("input"), sendBtn = $("send"), scroller = $("scroller");
+const modelEl = $("model");
+modelEl.value = store.get("chat_model") || "claude-sonnet-5-5";
+if (!modelEl.value) modelEl.value = "claude-sonnet-5-5";
+modelEl.addEventListener("change", () => store.set("chat_model", modelEl.value));
+
+function headers() {
+  return {
+    "content-type": "application/json",
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+    "anthropic-dangerous-direct-browser-access": "true",
+  };
+}
+
+/* ---------- Minimal, safe Markdown ---------- */
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function inline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+function renderMarkdown(src) {
+  const out = [];
+  const parts = src.split(/```/);
+  parts.forEach((part, i) => {
+    if (i % 2 === 1) {
+      const nl = part.indexOf("\n");
+      const code = nl === -1 ? part : part.slice(nl + 1);
+      out.push('<pre><button class="copy-btn" type="button">Copy</button><code>' + esc(code.replace(/\n$/, "")) + "</code></pre>");
+      return;
+    }
+    for (const block of part.split(/\n{2,}/)) {
+      const b = block.trim();
+      if (!b) continue;
+      const lines = b.split("\n");
+      if (lines.every((l) => /^\s*[-*•]\s+/.test(l))) {
+        out.push("<ul>" + lines.map((l) => "<li>" + inline(l.replace(/^\s*[-*•]\s+/, "")) + "</li>").join("") + "</ul>");
+      } else if (lines.every((l) => /^\s*\d+[.)]\s+/.test(l))) {
+        out.push("<ol>" + lines.map((l) => "<li>" + inline(l.replace(/^\s*\d+[.)]\s+/, "")) + "</li>").join("") + "</ol>");
+      } else if (/^#{1,6}\s/.test(b) && lines.length === 1) {
+        const level = b.match(/^#+/)[0].length <= 2 ? "h3" : "h4";
+        out.push(`<${level}>` + inline(b.replace(/^#+\s*/, "")) + `</${level}>`);
+      } else {
+        out.push("<p>" + lines.map(inline).join("<br>") + "</p>");
+      }
+    }
+  });
+  return out.join("");
+}
+
+/* ---------- Rendering ---------- */
+function renderAll() {
+  messagesEl.innerHTML = "";
+  if (!history.length) {
+    messagesEl.innerHTML = '<div class="empty"><h2>How can I help you today?</h2><div>Ask anything to get started.</div></div>';
+    return;
+  }
+  for (const m of history) addMessage(m.role, m.content);
+  scrollDown();
+}
+function addMessage(role, content) {
+  const empty = messagesEl.querySelector(".empty");
+  if (empty) empty.remove();
+  const wrap = document.createElement("div");
+  wrap.className = "msg " + role;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  if (role === "user") bubble.textContent = content;
+  else bubble.innerHTML = renderMarkdown(content);
+  wrap.appendChild(bubble);
+  messagesEl.appendChild(wrap);
+  return bubble;
+}
+function scrollDown() { scroller.scrollTop = scroller.scrollHeight; }
+function save() { store.set("chat_history", JSON.stringify(history.slice(-100))); }
+
+messagesEl.addEventListener("click", (e) => {
+  if (!e.target.classList.contains("copy-btn")) return;
+  const code = e.target.nextElementSibling.textContent;
+  navigator.clipboard?.writeText(code).then(() => {
+    e.target.textContent = "Copied";
+    setTimeout(() => (e.target.textContent = "Copy"), 1200);
+  });
+});
+
+function apiErrorMessage(status, text) {
+  let msg = "";
+  try { msg = JSON.parse(text).error?.message || ""; } catch {}
+  if (status === 401) return "Your API key was rejected. Click Lock and enter it again.";
+  if (status === 429) return msg || "Rate limit reached. Wait a moment and try again.";
+  if (status === 529) return "Claude is overloaded right now. Try again in a moment.";
+  return msg || text || ("Request failed (" + status + ")");
+}
+
+/* ---------- API key setup ---------- */
+function showSetup(msg) {
+  $("setup").hidden = false;
+  $("setupError").textContent = msg || "";
+  $("keyInput").value = "";
+  setTimeout(() => $("keyInput").focus(), 0);
+}
+$("setupForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const key = $("keyInput").value.trim();
+  if (!key.startsWith("sk-ant-")) { $("setupError").textContent = "That doesn't look like an Anthropic key (it should start with sk-ant-)."; return; }
+  $("setupBtn").disabled = true; $("setupError").textContent = "Checking…";
+  apiKey = key;
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/models?limit=1", { headers: headers() });
+    if (res.status === 401 || res.status === 403) {
+      apiKey = ""; $("setupError").textContent = "That key was rejected by Anthropic."; return;
+    }
+  } catch {
+    // Network hiccup: accept the key anyway; errors will show when chatting.
+  } finally {
+    $("setupBtn").disabled = false;
+  }
+  if (!apiKey) return;
+  store.set("anthropic_key", apiKey);
+  $("setup").hidden = true;
+  inputEl.focus();
+});
+$("forgetKey").addEventListener("click", () => {
+  if (!confirmForget()) return;
+  store.del("anthropic_key"); apiKey = ""; showSetup();
+});
+function confirmForget() {
+  // Inline two-click confirm (avoids blocking browser dialogs)
+  const b = $("forgetKey");
+  if (b.dataset.armed) { delete b.dataset.armed; b.textContent = "Lock"; return true; }
+  b.dataset.armed = "1"; b.textContent = "Sure?";
+  setTimeout(() => { delete b.dataset.armed; b.textContent = "Lock"; }, 3000);
+  return false;
+}
+$("newChat").addEventListener("click", () => {
+  if (busy) return;
+  history = []; save(); renderAll(); inputEl.focus();
+});
+
+/* ---------- Sending + streaming ---------- */
+inputEl.addEventListener("input", () => {
+  inputEl.style.height = "auto";
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 200) + "px";
+});
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    $("composer").requestSubmit();
+  }
+});
+
+function conversationForApi() {
+  const msgs = history.slice(-40).map((m) => ({ role: m.role, content: m.content }));
+  while (msgs.length && msgs[0].role !== "user") msgs.shift();
+  return msgs;
+}
+
+$("composer").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = inputEl.value.trim();
+  if (!text || busy) return;
+  if (!apiKey) { showSetup(); return; }
+  busy = true; sendBtn.disabled = true;
+  inputEl.value = ""; inputEl.style.height = "auto";
+
+  history.push({ role: "user", content: text });
+  save();
+  addMessage("user", text);
+  const bubble = addMessage("assistant", "");
+  bubble.classList.add("cursor");
+  scrollDown();
+
+  let reply = "";
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({
+        model: modelEl.value,
+        max_tokens: MAX_TOKENS,
+        system: SYSTEM_PROMPT,
+        messages: conversationForApi(),
+        stream: true,
+      }),
+    });
+    if (!res.ok || !res.body) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(apiErrorMessage(res.status, errText));
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data) continue;
+        let evt;
+        try { evt = JSON.parse(data); } catch { continue; }
+        if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+          reply += evt.delta.text;
+          bubble.innerHTML = renderMarkdown(reply);
+          scrollDown();
+        } else if (evt.type === "error") {
+          throw new Error(evt.error?.message || "Stream error");
+        }
+      }
+    }
+    if (!reply) throw new Error("Empty response from Claude.");
+    history.push({ role: "assistant", content: reply });
+    save();
+  } catch (err) {
+    const msg = err instanceof TypeError ? "Network error. Check your connection and try again." : String(err.message || err);
+    if (reply) {
+      history.push({ role: "assistant", content: reply });
+    } else {
+      history.pop(); // drop the unanswered turn so the conversation stays valid
+      inputEl.value = text;
+    }
+    save();
+    bubble.insertAdjacentHTML("beforeend", '<div class="error">Error: ' + esc(msg) + "</div>");
+  } finally {
+    bubble.classList.remove("cursor");
+    busy = false; sendBtn.disabled = false;
+    inputEl.focus();
+  }
+});
+
+/* ---------- Start ---------- */
+renderAll();
+if (!apiKey) showSetup();
+</script>
+</body>
+</html>
