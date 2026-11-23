@@ -1,37 +1,37 @@
-# Claude Chat on GitHub Pages + inaamaji.com
+# Private Claude Chat
 
-A single-page Claude chat. No server needed: the page talks to Claude directly,
-and your Anthropic API key is typed into the page once and saved only in your browser.
-Nothing secret is stored in this repository, so it is safe to keep it public.
+A single-page Claude chat hosted on GitHub Pages:
+**https://inam-ur-rehman1.github.io/claude-chat/**
 
-## 1. Put the files on GitHub
-1. On github.com click **New repository**, name it e.g. `claude-chat`, set it to **Public**, and create it.
-2. Click **Add file → Upload files**, upload `index.html` and `CNAME`, then **Commit changes**.
+There's no server: the page talks to Anthropic directly. Nothing secret is stored in this
+repository, so it's safe to keep it public.
 
-## 2. Turn on GitHub Pages
-1. In the repo go to **Settings → Pages**.
-2. Under **Build and deployment**, set Source to **Deploy from a branch**, branch **main**, folder **/ (root)**, and click **Save**.
-3. Under **Custom domain**, type `inaamaji.com` and click **Save**.
+## First time (on each browser or device)
+1. Open the link.
+2. Paste your Anthropic API key (console.anthropic.com → API Keys, with credit added under Billing).
+3. Choose a passcode, type it twice, and click **Save and start**.
 
-## 3. Point inaamaji.com at GitHub (in Lovable)
-Go to **Lovable → Workspace settings → Workspace domains → inaamaji.com → Advanced → DNS records** and add:
+Your key and your chats are encrypted with your passcode (AES-256-GCM, with the key derived by
+PBKDF2) and saved only in that browser. Anyone else who opens the link sees only the lock screen.
 
-| Type  | Name | Value                     |
-|-------|------|---------------------------|
-| A     | @    | 185.199.108.153           |
-| A     | @    | 185.199.109.153           |
-| A     | @    | 185.199.110.153           |
-| A     | @    | 185.199.111.153           |
-| CNAME | www  | YOUR-GITHUB-USERNAME.github.io |
-
-Remove any other A records for `@` so they don't conflict.
-
-## 4. Finish
-- DNS can take from a few minutes up to 24 hours. When GitHub's Pages settings shows the DNS check passed, tick **Enforce HTTPS**.
-- Open https://inaamaji.com, paste your Anthropic API key (from console.anthropic.com → API Keys, with credit added under Billing), and start chatting.
-
-## Notes
-- **Lock** removes the key from that browser. Do this on any shared computer.
-- Other visitors can open the page, but they can't use your key; they'd have to enter their own.
+## After that
+- Open the link and enter your passcode.
+- **Lock** locks the chat straight away. It also locks itself after 30 minutes without activity,
+  and whenever you close or leave the page.
+- **New chat** clears the conversation.
 - Change the model from the dropdown (Sonnet 5.5 default, Opus 5.5 strongest, Haiku 5.5 cheapest).
-- Chat history is saved in your browser; **New chat** clears it.
+- **Forgot your passcode?** On the lock screen choose **Forgot passcode? Erase and start over**.
+  This deletes the saved key and chats from that browser, and then you set it up again.
+  Nobody, including you, can recover them without the passcode.
+
+## Keeping it safe
+- Turn on two-factor authentication for this GitHub account. Anyone who can edit this repo can change the page.
+- Use a separate API key just for this page, in its own Console workspace with a low monthly spend limit.
+- Pick a passcode that isn't easy to guess. Longer is better.
+- Other GitHub Pages sites published from this account share the page's browser storage, so only
+  publish ones whose code you trust.
+
+## Custom domain (later)
+To use a custom domain such as inaamaji.com, first verify it in GitHub (your profile's
+**Settings → Pages → Add a domain**), and only then add the DNS records and set the custom domain.
+Doing it the other way round lets someone else claim the domain.

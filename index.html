@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-v9gUvROPW5C6vbityyyR7xgYX6axjviCgmzYYYPAKGA='; style-src 'unsafe-inline'; img-src data:; connect-src https://api.anthropic.com; base-uri 'none'; form-action 'none'">
+<link rel="icon" href="data:,">
 <title>Chat</title>
 <style>
   :root {
@@ -24,8 +26,8 @@
   body {
     background: var(--bg); color: var(--text);
     font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    display: flex; flex-direction: column;
   }
+  #app { height: 100%; display: flex; flex-direction: column; }
   header {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 12px 20px; border-bottom: 1px solid var(--line);
@@ -40,7 +42,7 @@
   button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
   button:disabled { opacity: .5; cursor: default; }
 
-  main { flex: 1; overflow-y: auto; }
+  main { flex: 1; overflow-y: auto; min-height: 0; }
   #messages { max-width: 760px; margin: 0 auto; padding: 24px 20px 12px; }
   .empty { text-align: center; color: var(--muted); margin-top: 18vh; }
   .empty h2 { color: var(--text); font-weight: 500; font-size: 26px; margin: 0 0 6px; }
@@ -82,20 +84,27 @@
   }
   .hint { max-width: 760px; margin: 6px auto 0; font-size: 12px; color: var(--muted); text-align: center; }
 
-  #setup {
+  #gate {
     position: fixed; inset: 0; background: var(--bg); display: flex;
     align-items: center; justify-content: center; padding: 20px; z-index: 10;
   }
-  #setup form {
+  #gate form {
     background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
     padding: 28px; width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 12px;
   }
-  #setup h2 { margin: 0; font-size: 20px; font-weight: 600; }
-  #setup p { margin: 0; font-size: 14px; color: var(--muted); }
-  #setup input {
+  #gate h2 { margin: 0; font-size: 20px; font-weight: 600; }
+  #gate p { margin: 0; font-size: 14px; color: var(--muted); }
+  #gate input {
     font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
     background: var(--bg); color: var(--text);
   }
+  .status { font-size: 14px; color: var(--muted); min-height: 1.4em; }
+  .status.error { color: var(--danger); }
+  .linkbtn {
+    background: none; border: 0; padding: 2px; color: var(--muted);
+    font-size: 13px; text-decoration: underline; align-self: center;
+  }
+  .linkbtn.armed { color: var(--danger); }
   [hidden] { display: none !important; }
   @media (max-width: 520px) {
     header { padding: 10px 12px; }
@@ -106,46 +115,66 @@
 </head>
 <body>
 
-<div id="setup" hidden>
-  <form id="setupForm">
-    <h2>Connect your Claude API key</h2>
-    <p>Paste your Anthropic API key (starts with <code>sk-ant-</code>). It is saved only in this browser and never uploaded anywhere except Anthropic.</p>
-    <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-..." required>
-    <div id="setupError" class="error"></div>
-    <button class="primary" id="setupBtn" type="submit">Continue</button>
+<div id="gate">
+  <form id="gateForm" novalidate>
+    <h2 id="gateTitle">Locked</h2>
+    <p id="gateText">Enter your passcode to unlock.</p>
+    <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Anthropic API key (sk-ant-...)" aria-label="Anthropic API key" hidden>
+    <input id="passInput" type="password" autocomplete="current-password" placeholder="Passcode" aria-label="Passcode">
+    <input id="pass2Input" type="password" autocomplete="new-password" placeholder="Type the passcode again" aria-label="Repeat passcode" hidden>
+    <div id="gateMsg" class="status" role="status" aria-live="polite"></div>
+    <button class="primary" id="gateBtn" type="submit">Unlock</button>
+    <button class="linkbtn" id="resetBtn" type="button" hidden>Forgot passcode? Erase and start over</button>
+    <noscript><p>This page needs JavaScript turned on.</p></noscript>
   </form>
 </div>
 
-<header>
-  <h1>Chat</h1>
-  <div class="actions">
-    <select id="model" title="Model">
-      <option value="claude-sonnet-5-5">Sonnet 5.5</option>
-      <option value="claude-opus-5-5">Opus 5.5</option>
-      <option value="claude-haiku-5-5">Haiku 5.5</option>
-    </select>
-    <button id="newChat" type="button">New chat</button>
-    <button id="forgetKey" type="button" title="Remove the saved API key from this browser">Lock</button>
-  </div>
-</header>
+<div id="app" hidden>
+  <header>
+    <h1>Chat</h1>
+    <div class="actions">
+      <select id="model" title="Model">
+        <option value="claude-sonnet-5-5">Sonnet 5.5</option>
+        <option value="claude-opus-5-5">Opus 5.5</option>
+        <option value="claude-haiku-5-5">Haiku 5.5</option>
+      </select>
+      <button id="newChat" type="button">New chat</button>
+      <button id="lockBtn" type="button" title="Lock the chat. Your passcode is needed to open it again.">Lock</button>
+    </div>
+  </header>
 
-<main id="scroller">
-  <div id="messages"></div>
-</main>
+  <main id="scroller">
+    <div id="messages"></div>
+  </main>
 
-<footer>
-  <form id="composer">
-    <textarea id="input" rows="1" placeholder="Message Claude…" autofocus></textarea>
-    <button id="send" class="primary" type="submit">Send</button>
-  </form>
-  <div class="hint">Enter to send · Shift+Enter for a new line</div>
-</footer>
+  <footer>
+    <form id="composer">
+      <textarea id="input" rows="1" placeholder="Message Claude…" aria-label="Message"></textarea>
+      <button id="send" class="primary" type="submit">Send</button>
+    </form>
+    <div class="hint">Enter to send · Shift+Enter for a new line</div>
+  </footer>
+</div>
 
 <script>
+"use strict";
+/* Refuse to run inside another site's frame */
+if (window.top !== window.self) {
+  document.body.textContent = "This page can't be shown inside another site.";
+  throw new Error("Refusing to run inside a frame");
+}
+
 /* ---------- Settings ---------- */
 const API_URL = "https://api.anthropic.com/v1/messages";
+const MODELS_URL = "https://api.anthropic.com/v1/models?limit=1";
 const SYSTEM_PROMPT = "You are Claude, a helpful AI assistant.";
 const MAX_TOKENS = 8192;
+const AUTO_LOCK_MINUTES = 30;      // lock after this long without activity
+const MIN_PASSCODE = 6;
+const PBKDF2_ITERATIONS = 600000;  // makes passcode guessing slow
+const VAULT = "vault_v1";          // encrypted API key
+const HISTORY = "history_v1";      // encrypted chat history
+const LEGACY_KEY = "anthropic_key", LEGACY_HISTORY = "chat_history"; // old plain-text storage
 
 /* ---------- Storage (safe wrappers) ---------- */
 const store = {
@@ -154,22 +183,58 @@ const store = {
   del(k) { try { localStorage.removeItem(k); } catch {} },
 };
 
-let apiKey = store.get("anthropic_key") || "";
+/* ---------- Encryption: PBKDF2 (SHA-256) -> AES-256-GCM ---------- */
+const te = new TextEncoder(), td = new TextDecoder();
+function toB64(buf) {
+  const u = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function fromB64(str) {
+  const s = atob(str), u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
+  return u;
+}
+async function deriveKey(passcode, salt, iterations) {
+  const base = await crypto.subtle.importKey("raw", te.encode(passcode), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function seal(key, text) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, te.encode(text));
+  return { iv: toB64(iv), ct: toB64(ct) };
+}
+async function unseal(key, box) {
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(box.iv) }, key, fromB64(box.ct));
+  return td.decode(pt);
+}
+
+/* ---------- State ---------- */
+let cryptoKey = null;   // only in memory while unlocked
+let apiKey = "";
 let history = [];
-try { history = JSON.parse(store.get("chat_history") || "[]"); } catch { history = []; }
 let busy = false;
+let session = 0;        // bumps on every lock, so late replies are ignored
+let currentAbort = null;
+let lastActive = Date.now();
 
 const $ = (id) => document.getElementById(id);
+const gate = $("gate"), app = $("app");
+const keyInput = $("keyInput"), passInput = $("passInput"), pass2Input = $("pass2Input");
+const gateMsg = $("gateMsg"), gateBtn = $("gateBtn"), resetBtn = $("resetBtn");
 const messagesEl = $("messages"), inputEl = $("input"), sendBtn = $("send"), scroller = $("scroller");
 const modelEl = $("model");
 modelEl.value = store.get("chat_model") || "claude-sonnet-5-5";
 if (!modelEl.value) modelEl.value = "claude-sonnet-5-5";
 modelEl.addEventListener("change", () => store.set("chat_model", modelEl.value));
 
-function headers() {
+function headersFor(key) {
   return {
     "content-type": "application/json",
-    "x-api-key": apiKey,
+    "x-api-key": key,
     "anthropic-version": "2023-06-01",
     "anthropic-dangerous-direct-browser-access": "true",
   };
@@ -239,7 +304,17 @@ function addMessage(role, content) {
   return bubble;
 }
 function scrollDown() { scroller.scrollTop = scroller.scrollHeight; }
-function save() { store.set("chat_history", JSON.stringify(history.slice(-100))); }
+
+/* Saves are encrypted and run one after another, so an older save can't overwrite a newer one */
+let saving = Promise.resolve();
+function save() {
+  if (!cryptoKey) return saving;
+  const key = cryptoKey, snapshot = JSON.stringify(history.slice(-100));
+  saving = saving
+    .then(async () => { store.set(HISTORY, JSON.stringify(await seal(key, snapshot))); })
+    .catch(() => {});
+  return saving;
+}
 
 messagesEl.addEventListener("click", (e) => {
   if (!e.target.classList.contains("copy-btn")) return;
@@ -253,55 +328,193 @@ messagesEl.addEventListener("click", (e) => {
 function apiErrorMessage(status, text) {
   let msg = "";
   try { msg = JSON.parse(text).error?.message || ""; } catch {}
-  if (status === 401) return "Your API key was rejected. Click Lock and enter it again.";
+  if (status === 401) return "Anthropic rejected your API key. Click Lock, choose “Forgot passcode? Erase and start over”, and enter a new key.";
   if (status === 429) return msg || "Rate limit reached. Wait a moment and try again.";
   if (status === 529) return "Claude is overloaded right now. Try again in a moment.";
   return msg || text || ("Request failed (" + status + ")");
 }
 
-/* ---------- API key setup ---------- */
-function showSetup(msg) {
-  $("setup").hidden = false;
-  $("setupError").textContent = msg || "";
-  $("keyInput").value = "";
-  setTimeout(() => $("keyInput").focus(), 0);
-}
-$("setupForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const key = $("keyInput").value.trim();
-  if (!key.startsWith("sk-ant-")) { $("setupError").textContent = "That doesn't look like an Anthropic key (it should start with sk-ant-)."; return; }
-  $("setupBtn").disabled = true; $("setupError").textContent = "Checking…";
-  apiKey = key;
+/* ---------- Lock screen: set up, unlock, lock, reset ---------- */
+let gateMode = "unlock";
+function readVault() {
   try {
-    const res = await fetch("https://api.anthropic.com/v1/models?limit=1", { headers: headers() });
-    if (res.status === 401 || res.status === 403) {
-      apiKey = ""; $("setupError").textContent = "That key was rejected by Anthropic."; return;
-    }
+    const v = JSON.parse(store.get(VAULT) || "null");
+    return v && v.salt && v.iv && v.ct ? v : null;
+  } catch { return null; }
+}
+function setMsg(text, isError) {
+  gateMsg.textContent = text || "";
+  gateMsg.classList.toggle("error", !!isError);
+}
+function showGate(mode, msg, isError) {
+  gateMode = mode;
+  const setup = mode === "setup";
+  app.hidden = true;
+  gate.hidden = false;
+  $("gateTitle").textContent = setup ? "Set up your private chat" : "Locked";
+  $("gateText").textContent = setup
+    ? "Paste your Anthropic API key and choose a passcode. Your key and chats are stored encrypted in this browser, and only your passcode can unlock them."
+    : "Enter your passcode to unlock.";
+  keyInput.hidden = !setup;
+  pass2Input.hidden = !setup;
+  resetBtn.hidden = setup;
+  passInput.autocomplete = setup ? "new-password" : "current-password";
+  passInput.placeholder = setup ? "Choose a passcode (" + MIN_PASSCODE + "+ characters)" : "Passcode";
+  gateBtn.textContent = setup ? "Save and start" : "Unlock";
+  gateBtn.disabled = false;
+  passInput.value = "";
+  pass2Input.value = "";
+  disarmReset();
+  setMsg(msg, isError);
+  setTimeout(() => (setup && !keyInput.value ? keyInput : passInput).focus(), 0);
+}
+
+$("gateForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (gateBtn.disabled) return;
+  if (!window.crypto || !crypto.subtle) {
+    setMsg("This browser can't encrypt here. Open the page over https in an up-to-date browser.", true);
+    return;
+  }
+  gateBtn.disabled = true;
+  try {
+    if (gateMode === "setup") await doSetup();
+    else await doUnlock();
+  } catch (err) {
+    setMsg("Something went wrong: " + (err && err.message ? err.message : err), true);
+  } finally {
+    gateBtn.disabled = false;
+  }
+});
+
+async function doSetup() {
+  const key = keyInput.value.trim(), p1 = passInput.value, p2 = pass2Input.value;
+  if (!key.startsWith("sk-ant-")) return setMsg("That doesn't look like an Anthropic key (it should start with sk-ant-).", true);
+  if (p1.length < MIN_PASSCODE) return setMsg("Use at least " + MIN_PASSCODE + " characters for your passcode.", true);
+  if (p1 !== p2) return setMsg("The two passcodes don't match.", true);
+
+  setMsg("Checking your key…");
+  try {
+    const res = await fetch(MODELS_URL, { headers: headersFor(key) });
+    if (res.status === 401 || res.status === 403) return setMsg("That key was rejected by Anthropic.", true);
   } catch {
     // Network hiccup: accept the key anyway; errors will show when chatting.
-  } finally {
-    $("setupBtn").disabled = false;
   }
-  if (!apiKey) return;
-  store.set("anthropic_key", apiKey);
-  $("setup").hidden = true;
-  inputEl.focus();
-});
-$("forgetKey").addEventListener("click", () => {
-  if (!confirmForget()) return;
-  store.del("anthropic_key"); apiKey = ""; showSetup();
-});
-function confirmForget() {
-  // Inline two-click confirm (avoids blocking browser dialogs)
-  const b = $("forgetKey");
-  if (b.dataset.armed) { delete b.dataset.armed; b.textContent = "Lock"; return true; }
-  b.dataset.armed = "1"; b.textContent = "Sure?";
-  setTimeout(() => { delete b.dataset.armed; b.textContent = "Lock"; }, 3000);
-  return false;
+
+  setMsg("Encrypting…");
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const k = await deriveKey(p1, salt, PBKDF2_ITERATIONS);
+  const box = await seal(k, key);
+  store.set(VAULT, JSON.stringify({ v: 1, iter: PBKDF2_ITERATIONS, salt: toB64(salt), iv: box.iv, ct: box.ct }));
+  if (!readVault()) return setMsg("This browser won't save data (private window or storage turned off).", true);
+
+  // Bring over chats saved by the old, unencrypted version, then delete the plain-text copies.
+  let carried = [];
+  try { const h = JSON.parse(store.get(LEGACY_HISTORY) || "[]"); if (Array.isArray(h)) carried = h; } catch {}
+  store.del(LEGACY_KEY);
+  store.del(LEGACY_HISTORY);
+  store.del(HISTORY);
+
+  cryptoKey = k;
+  apiKey = key;
+  history = carried;
+  await save();
+  unlocked();
 }
+
+async function doUnlock() {
+  const vault = readVault();
+  if (!vault) return showGate("setup");
+  const p = passInput.value;
+  if (!p) return setMsg("Enter your passcode.", true);
+
+  setMsg("Unlocking…");
+  let k, key;
+  try {
+    k = await deriveKey(p, fromB64(vault.salt), vault.iter || PBKDF2_ITERATIONS);
+    key = await unseal(k, vault);
+  } catch {
+    passInput.value = "";
+    await new Promise((r) => setTimeout(r, 700));
+    return setMsg("Wrong passcode.", true);
+  }
+
+  cryptoKey = k;
+  apiKey = key;
+  history = [];
+  const raw = store.get(HISTORY);
+  if (raw) {
+    try { const h = JSON.parse(await unseal(k, JSON.parse(raw))); if (Array.isArray(h)) history = h; } catch {}
+  }
+  unlocked();
+}
+
+function unlocked() {
+  keyInput.value = passInput.value = pass2Input.value = "";
+  setMsg("");
+  gate.hidden = true;
+  app.hidden = false;
+  lastActive = Date.now();
+  renderAll();
+  inputEl.focus();
+}
+
+function lock(msg) {
+  session++;
+  if (currentAbort) currentAbort.abort();
+  currentAbort = null;
+  busy = false;
+  sendBtn.disabled = false;
+  cryptoKey = null;
+  apiKey = "";
+  history = [];
+  messagesEl.innerHTML = "";
+  inputEl.value = "";
+  inputEl.style.height = "auto";
+  showGate(readVault() ? "unlock" : "setup", msg);
+}
+$("lockBtn").addEventListener("click", () => lock());
+
+let resetTimer = null;
+function disarmReset() {
+  clearTimeout(resetTimer);
+  delete resetBtn.dataset.armed;
+  resetBtn.classList.remove("armed");
+  resetBtn.textContent = "Forgot passcode? Erase and start over";
+}
+resetBtn.addEventListener("click", () => {
+  // Inline two-click confirm (avoids blocking browser dialogs)
+  if (!resetBtn.dataset.armed) {
+    resetBtn.dataset.armed = "1";
+    resetBtn.classList.add("armed");
+    resetBtn.textContent = "Click again to erase the saved key and chats";
+    resetTimer = setTimeout(disarmReset, 4000);
+    return;
+  }
+  [VAULT, HISTORY, LEGACY_KEY, LEGACY_HISTORY].forEach((k) => store.del(k));
+  keyInput.value = "";
+  showGate("setup", "Erased. Set up again with your API key and a new passcode.");
+});
+
+/* Auto-lock after inactivity, and whenever you leave the page */
+function markActive() { lastActive = Date.now(); }
+["pointerdown", "keydown", "wheel", "touchstart", "scroll"].forEach((ev) =>
+  document.addEventListener(ev, markActive, { capture: true, passive: true }));
+function checkIdle() {
+  if (cryptoKey && !busy && Date.now() - lastActive > AUTO_LOCK_MINUTES * 60000) {
+    lock("Locked after " + AUTO_LOCK_MINUTES + " minutes without activity.");
+  }
+}
+setInterval(checkIdle, 20000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkIdle(); });
+window.addEventListener("pagehide", () => { if (cryptoKey) lock(); });
+
 $("newChat").addEventListener("click", () => {
-  if (busy) return;
-  history = []; save(); renderAll(); inputEl.focus();
+  if (busy || !cryptoKey) return;
+  history = [];
+  save();
+  renderAll();
+  inputEl.focus();
 });
 
 /* ---------- Sending + streaming ---------- */
@@ -325,10 +538,12 @@ function conversationForApi() {
 $("composer").addEventListener("submit", async (e) => {
   e.preventDefault();
   const text = inputEl.value.trim();
-  if (!text || busy) return;
-  if (!apiKey) { showSetup(); return; }
-  busy = true; sendBtn.disabled = true;
-  inputEl.value = ""; inputEl.style.height = "auto";
+  if (!text || busy || !cryptoKey) return;
+  const mySession = session;
+  busy = true;
+  sendBtn.disabled = true;
+  inputEl.value = "";
+  inputEl.style.height = "auto";
 
   history.push({ role: "user", content: text });
   save();
@@ -337,11 +552,14 @@ $("composer").addEventListener("submit", async (e) => {
   bubble.classList.add("cursor");
   scrollDown();
 
+  const abort = new AbortController();
+  currentAbort = abort;
   let reply = "";
   try {
     const res = await fetch(API_URL, {
       method: "POST",
-      headers: headers(),
+      headers: headersFor(apiKey),
+      signal: abort.signal,
       body: JSON.stringify({
         model: modelEl.value,
         max_tokens: MAX_TOKENS,
@@ -379,10 +597,12 @@ $("composer").addEventListener("submit", async (e) => {
         }
       }
     }
+    if (mySession !== session) return;
     if (!reply) throw new Error("Empty response from Claude.");
     history.push({ role: "assistant", content: reply });
     save();
   } catch (err) {
+    if (mySession !== session) return; // locked while waiting: drop everything quietly
     const msg = err instanceof TypeError ? "Network error. Check your connection and try again." : String(err.message || err);
     if (reply) {
       history.push({ role: "assistant", content: reply });
@@ -393,15 +613,25 @@ $("composer").addEventListener("submit", async (e) => {
     save();
     bubble.insertAdjacentHTML("beforeend", '<div class="error">Error: ' + esc(msg) + "</div>");
   } finally {
-    bubble.classList.remove("cursor");
-    busy = false; sendBtn.disabled = false;
-    inputEl.focus();
+    if (mySession === session) {
+      bubble.classList.remove("cursor");
+      busy = false;
+      sendBtn.disabled = false;
+      currentAbort = null;
+      lastActive = Date.now();
+      inputEl.focus();
+    }
   }
 });
 
 /* ---------- Start ---------- */
-renderAll();
-if (!apiKey) showSetup();
+if (readVault()) {
+  showGate("unlock");
+} else {
+  const legacy = store.get(LEGACY_KEY);
+  if (legacy) keyInput.value = legacy;
+  showGate("setup", legacy ? "Choose a passcode to protect the key this browser already saved." : "");
+}
 </script>
 </body>
 </html>
